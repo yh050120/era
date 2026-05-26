@@ -1,9 +1,9 @@
 import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+import plotly.graph_objects as go
 
-# 페이지 기본 설정 (가로로 넓게 쓰기 위해 wide 모드로 변경)
+# 페이지 기본 설정
 st.set_page_config(page_title="결정구조 밀도 시뮬레이터", layout="wide")
 
 # ==========================================
@@ -85,7 +85,7 @@ elif st.session_state.step == 4:
     }
     
     st.markdown(f"### 📌 {structure} - {target}")
-    st.latex(f"격자 상수 (a) = {props[structure]['a']} \\quad | \\quad \\text{{APF}} = {props[structure]['apf'] * 100}\\%")
+    st.latex(f"\\text{{격자 상수 }} (a) = {props[structure]['a']} \\quad | \\quad \\text{{APF}} = {props[structure]['apf'] * 100}\\%")
     st.markdown("---")
     
     R = 1.0 # 기준 원자 반지름
@@ -96,7 +96,7 @@ elif st.session_state.step == 4:
     col_2d, col_3d = st.columns(2)
     
     # ----------------------------------------------------
-    # [왼쪽] 2D 단면 / 선 배열 시각화 설정
+    # [왼쪽] 2D 단면 / 선 배열 시각화 설정 (Matplotlib)
     # ----------------------------------------------------
     fig2d, ax2d = plt.subplots(figsize=(5, 5))
     ax2d.set_aspect('equal')
@@ -170,54 +170,65 @@ elif st.session_state.step == 4:
         st.pyplot(fig2d)
 
     # ----------------------------------------------------
-    # [오른쪽] 3D 투시도 시각화 설정
+    # [오른쪽] 3D 인터랙티브 시각화 설정 (Plotly)
     # ----------------------------------------------------
-    fig3d = plt.figure(figsize=(5, 5))
-    ax3d = fig3d.add_subplot(111, projection='3d')
-    ax3d.set_box_aspect([1, 1, 1])
-    ax3d.set_title("3D 단위정 (Unit Cell) 투시도", fontsize=15, pad=15)
-    ax3d.axis('off')
+    fig3d = go.Figure()
 
-    # 1. 큐브 모서리 그리기 (12개 선)
+    # 1. 큐브 모서리 그리기 (Wireframe)
     edges = [
-        [(0,0,0),(a,0,0)], [(0,a,0),(a,a,0)], [(0,0,a),(a,0,a)], [(0,a,a),(a,a,a)],
-        [(0,0,0),(0,a,0)], [(a,0,0),(a,a,0)], [(0,0,a),(0,a,a)], [(a,0,a),(a,a,a)],
-        [(0,0,0),(0,0,a)], [(a,0,0),(a,0,a)], [(0,a,0),(0,a,a)], [(a,a,0),(a,a,a)]
+        ([0, a], [0, 0], [0, 0]), ([0, a], [a, a], [0, 0]), ([0, a], [0, 0], [a, a]), ([0, a], [a, a], [a, a]),
+        ([0, 0], [0, a], [0, 0]), ([a, a], [0, a], [0, 0]), ([0, 0], [0, a], [a, a]), ([a, a], [0, a], [a, a]),
+        ([0, 0], [0, 0], [0, a]), ([a, a], [0, 0], [0, a]), ([0, 0], [a, a], [0, a]), ([a, a], [a, a], [0, a])
     ]
-    for edge in edges:
-        p1, p2 = edge
-        ax3d.plot([p1[0], p2[0]], [p1[1], p2[1]], [p1[2], p2[2]], color='gray', linestyle=':', alpha=0.6)
+    for ex, ey, ez in edges:
+        fig3d.add_trace(go.Scatter3d(x=ex, y=ey, z=ez, mode='lines', line=dict(color='gray', width=2), hoverinfo='skip'))
 
-    # 2. 3D 원자 배치 (산점도)
-    corners = [(0,0,0), (a,0,0), (0,a,0), (a,a,0), (0,0,a), (a,0,a), (0,a,a), (a,a,a)]
-    for c in corners: ax3d.scatter(*c, s=150, c='lightgray', edgecolors='k', alpha=0.9)
+    # 2. 3D 원자 배치
+    # 꼭짓점 (Corners)
+    cx, cy, cz = zip(*[(0,0,0), (a,0,0), (0,a,0), (a,a,0), (0,0,a), (a,0,a), (0,a,a), (a,a,a)])
+    fig3d.add_trace(go.Scatter3d(x=cx, y=cy, z=cz, mode='markers', marker=dict(size=12, color='lightgray', line=dict(color='black', width=1)), name='Corner Atoms'))
     
+    # 체심/면심 (Body / Face centered)
     if "BCC" in structure:
-        ax3d.scatter(a/2, a/2, a/2, s=150, c='orange', edgecolors='k', alpha=0.9)
+        fig3d.add_trace(go.Scatter3d(x=[a/2], y=[a/2], z=[a/2], mode='markers', marker=dict(size=15, color='orange', line=dict(color='black', width=1)), name='Body-Centered Atom'))
     elif "FCC" in structure:
-        faces = [(a/2, a/2, 0), (a/2, a/2, a), (a/2, 0, a/2), (a/2, a, a/2), (0, a/2, a/2), (a, a/2, a/2)]
-        for f in faces: ax3d.scatter(*f, s=150, c='gold', edgecolors='k', alpha=0.9)
+        fx, fy, fz = zip(*[(a/2, a/2, 0), (a/2, a/2, a), (a/2, 0, a/2), (a/2, a, a/2), (0, a/2, a/2), (a, a/2, a/2)])
+        fig3d.add_trace(go.Scatter3d(x=fx, y=fy, z=fz, mode='markers', marker=dict(size=13, color='gold', line=dict(color='black', width=1)), name='Face-Centered Atoms'))
 
     # 3. 타겟 평면 또는 선 그리기
     if calc_type == "면밀도 (Planar Density)":
         if target == "(100) 평면":
-            verts = [[(a, 0, 0), (a, a, 0), (a, a, a), (a, 0, a)]]
+            px, py, pz = [a, a, a, a], [0, a, a, 0], [0, 0, a, a]
         elif target == "(110) 평면":
-            verts = [[(a, 0, 0), (0, a, 0), (0, a, a), (a, 0, a)]]
+            px, py, pz = [a, 0, 0, a], [0, a, a, 0], [0, 0, a, a]
         elif target == "(111) 평면":
-            verts = [[(a, 0, 0), (0, a, 0), (0, 0, a)]]
-        poly = Poly3DCollection(verts, alpha=0.4, facecolor='dodgerblue', edgecolor='blue', lw=2)
-        ax3d.add_collection3d(poly)
+            px, py, pz = [a, 0, 0], [0, a, 0], [0, 0, a]
+            
+        fig3d.add_trace(go.Mesh3d(x=px, y=py, z=pz, color='dodgerblue', opacity=0.4, name=f'{target}', hoverinfo='name'))
     else:
         if target == "[100] 방향":
-            ax3d.plot([0, a], [0, 0], [0, 0], color='red', lw=4)
+            lx, ly, lz = [0, a], [0, 0], [0, 0]
         elif target == "[110] 방향":
-            ax3d.plot([0, a], [0, a], [0, 0], color='red', lw=4)
+            lx, ly, lz = [0, a], [0, a], [0, 0]
         elif target == "[111] 방향":
-            ax3d.plot([0, a], [0, a], [0, a], color='red', lw=4)
+            lx, ly, lz = [0, a], [0, a], [0, a]
+            
+        fig3d.add_trace(go.Scatter3d(x=lx, y=ly, z=lz, mode='lines', line=dict(color='red', width=8), name=f'{target}'))
+
+    # 레이아웃 설정 (축 숨기기 및 여백 최소화)
+    fig3d.update_layout(
+        title="3D 단위정 (드래그하여 360도 회전)",
+        scene=dict(
+            xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False),
+            aspectmode='cube'
+        ),
+        margin=dict(l=0, r=0, b=0, t=40),
+        showlegend=True,
+        legend=dict(yanchor="top", y=0.9, xanchor="left", x=0.1)
+    )
 
     with col_3d:
-        st.pyplot(fig3d)
+        st.plotly_chart(fig3d, use_container_width=True)
 
     # ----------------------------------------------------
     # 정보 및 계산식 출력
@@ -226,12 +237,23 @@ elif st.session_state.step == 4:
     st.latex(formula)
     
     if target == "(111) 평면":
-        st.warning("**[주의]** BCC 구조의 (111) 평면은 체심(중심) 원자를 관통하지 않고 비껴갑니다! (3D 투시도를 확인해보세요)")
+        st.warning("**[주의]** BCC 구조의 (111) 평면은 체심(중심) 원자를 관통하지 않고 비껴갑니다! (3D 투시도를 회전하며 확인해보세요)")
         if "FCC" in structure:
             st.success("**[참고]** FCC의 (111) 평면은 원자가 가장 빈틈없이 배열된 최조밀 충진면(Close-Packed Plane)입니다.")
+
+    st.write("")
+    
+    # + 알잘딱깔센 추가 기능: 재료공학적 의미 아코디언 탭
+    with st.expander("📚 [결과 해석] 이 밀도 값이 의미하는 바는 무엇일까요?"):
+        st.markdown(f"""
+        **{target}의 밀도 분석이 중요한 이유**
+        - **슬립계 (Slip System):** 금속이 외부의 힘을 받아 영구적으로 형태가 변할 때(소성 변형), 원자들은 밀도가 가장 높은 평면(조밀면)을 따라, 밀도가 가장 높은 방향(조밀방향)으로 미끄러집니다(Slip).
+        - **{structure}의 특성:**
+            - **FCC**는 (111) 평면처럼 매우 빽빽한 조밀면을 가지고 있어 슬립이 쉽게 일어나며, 이는 연성(잘 늘어나는 성질)이 매우 좋음을 의미합니다. (예: 금, 은, 알루미늄)
+            - **BCC**는 완벽한 최조밀면이 없어 FCC보다 단단하지만 상온에서 상대적으로 덜 유연한 특징이 있습니다. (예: 철, 텅스텐)
+        """)
 
     st.write("")
     if st.button("🔄 처음부터 다시 계산하기"):
         reset_step()
         st.rerun()
-        
